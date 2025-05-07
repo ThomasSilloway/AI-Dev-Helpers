@@ -1,0 +1,5 @@
+[project]
+name = "file_to_markdown"
+version = "0.1.0"
+description = "Reformats files as markdown"
+dependencies = []
