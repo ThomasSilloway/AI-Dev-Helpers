@@ -114,10 +114,68 @@ def main():
     print("\n--- Setup Complete ---")
     print(f"Intermediate source file ready at: {intermediate_file}")
     print(f"Final output will be generated at: {output_file}")
-    print("\nNext step would be to process the intermediate file using Aider")
-    print("and save the result to the specified output path.")
-    # Example of how Aider might be called (conceptual for now):
-    # print(f"Conceptual command: aider --yes --output-file \"{output_file}\" \"{intermediate_file}\" \"Convert this to markdown.\"")
+    # 4. Process with Aider and save
+    print("\n--- Processing with Aider ---")
+    aider_prompt = (
+        "Please convert the entire content of this file into well-formatted markdown. "
+        "Replace the existing content of this file with *only* the generated markdown. "
+        "Do not add any conversational text, commentary, introductions, or summaries before or after the markdown content itself."
+    )
+    aider_command = [
+        "aider",
+        "--yes",  # Automatically accept changes from Aider
+        str(intermediate_file),  # The file Aider should read and modify
+        "--message", aider_prompt,  # The instruction for Aider
+    ]
+
+    print(f"Running Aider command: {' '.join(aider_command)}")
+    try:
+        # Run Aider. It is expected to modify intermediate_file in place.
+        process = subprocess.run(
+            aider_command,
+            capture_output=True,  # Capture stdout/stderr
+            text=True,            # Decode stdout/stderr as text
+            check=True,           # Raise CalledProcessError for non-zero exit codes
+            encoding="utf-8",     # Specify encoding for text mode
+        )
+        
+        # Optional: Log Aider's output for debugging, even on success.
+        # Useful if Aider's behavior needs to be inspected.
+        # if process.stdout.strip():
+        #     print(f"Aider stdout:\n{process.stdout}")
+        # if process.stderr.strip():
+        #     print(f"Aider stderr:\n{process.stderr}")
+
+        print(f"Aider successfully processed '{intermediate_file}'.")
+
+        # Read the markdown content from the (now modified) intermediate file
+        markdown_content = intermediate_file.read_text(encoding="utf-8")
+
+        # Write the extracted markdown content to the final output file
+        output_file.write_text(markdown_content, encoding="utf-8")
+        
+        print(f"\nMarkdown content successfully written to: {output_file}")
+        print("--- Conversion Complete ---")
+        print(f"Final markdown output is available at: {output_file}")
+
+    except subprocess.CalledProcessError as e:
+        print(f"\nAider command failed with exit code {e.returncode}.")
+        print(f"Command: {' '.join(e.cmd)}")
+        print("Aider's standard output:")
+        print(e.stdout if e.stdout else "[No standard output]")
+        print("Aider's standard error:")
+        print(e.stderr if e.stderr else "[No standard error]")
+        print("\nExiting due to Aider processing error.")
+        print(f"The intermediate file '{intermediate_file}' might contain partial results or Aider's error messages.")
+        print("You may want to inspect it or the Aider log files for more details.")
+    except FileNotFoundError:
+        print("\nError: The 'aider' command was not found.")
+        print("Please ensure Aider is installed and accessible in your system's PATH.")
+        print("See Aider installation instructions if needed.")
+        print("Exiting.")
+    except Exception as e:
+        print(f"\nAn unexpected error occurred during Aider processing or file operations: {e}")
+        print("Exiting.")
 
 if __name__ == "__main__":
     main()
