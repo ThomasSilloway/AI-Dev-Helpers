@@ -6,7 +6,7 @@ import shlex # For safely quoting arguments
 # Define the scratch directory and the intermediate source file name
 SCRATCH_DIR_NAME = "scratch-pad"
 INTERMEDIATE_SOURCE_FILE_NAME = "file_to_markdown_source.md"
-AIDER_BATCH_FILE_NAME = r"scratch-pad\hello-world.bat" # Name of the batch file to run Aider
+AIDER_BATCH_FILE_NAME = "run-aider.bat" # Name of the batch file to run Aider
 
 def get_source_content() -> str:
     """
@@ -125,8 +125,8 @@ def main():
     # We need to quote the arguments in case they contain spaces
     batch_command = [
         str(batch_file_path),
-        shlex.quote(str(intermediate_file)), # Argument %1 for the batch file
-        shlex.quote(aider_prompt),          # Argument %2 for the batch file
+        str(intermediate_file), # Argument %1 for the batch file
+        aider_prompt,          # Argument %2 for the batch file
     ]
 
     print(f"Running batch file: {' '.join(batch_command)}")
