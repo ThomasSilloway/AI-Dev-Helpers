@@ -1,7 +1,7 @@
 import os
 import pathlib
 import subprocess
-import shlex # For safely quoting arguments
+# shlex is no longer strictly needed here if we're not using shlex.quote for this part
 
 # Define the scratch directory and the intermediate source file name
 SCRATCH_DIR_NAME = "scratch-pad"
@@ -10,35 +10,58 @@ AIDER_BATCH_FILE_NAME = "run-aider.bat" # Name of the batch file to run Aider
 
 def get_source_content() -> str:
     """
-    Prompts the user for source content, either as a file path or direct input.
+    Prompts the user for source content, either as a file path or direct multi-line input.
+    For direct input, it reads multiple lines until a specific delimiter is entered.
     Returns the content as a string.
     """
+    print("Please enter the full path to your source file, OR paste the content directly.")
+    print("If pasting content, type 'END_OF_PASTE' on a new line by itself after your content and press Enter.")
+    
+    first_line_input = input("File path or first line of pasted content: ").strip()
+
+    # Check if the first line looks like a file path
+    try:
+        input_path = pathlib.Path(first_line_input)
+        if input_path.is_file():
+            print(f"Reading content from file: {input_path}")
+            return input_path.read_text(encoding="utf-8")
+        elif input_path.exists() and not input_path.is_file(): # It's a directory or something else
+             print(f"Error: '{first_line_input}' is a directory or not a regular file. Please provide a valid file path or paste content.")
+             return get_source_content() # Recurse to try again
+    except OSError as e:
+        # Not a valid path, likely due to invalid characters for a path.
+        # Assume it's the start of direct content input.
+        # We'll print this error only if it's not an empty string (which is handled later)
+        if first_line_input: # Only print error if it's not just an empty first line for pasting
+            print(f"Could not interpret '{first_line_input}' as a file path (OS error: {e}). Treating as direct content.")
+        # Proceed to treat as direct content below
+
+    # If it's not a file, assume it's direct content input (or the start of it)
+    print("Interpreting as direct content input. Enter your content now.")
+    if not first_line_input: # If the first line was empty, prompt again specifically for content
+        print("(If you intended to provide a file path, please restart and enter the path first)")
+
+    lines = []
+    if first_line_input: # Add the first line if it wasn't a file and wasn't empty
+        lines.append(first_line_input)
+
     while True:
-        user_input = input(
-            "Please enter the full path to your source file, or paste the content directly:\n"
-        ).strip()
-
-        if not user_input:
-            print("Input cannot be empty. Please provide a file path or paste content.")
-            continue
-
-        input_path = pathlib.Path(user_input)
-
         try:
-            if input_path.is_file():
-                print(f"Reading content from file: {input_path}")
-                return input_path.read_text(encoding="utf-8")
-            else:
-                print("Input is not a valid file path or file does not exist. Interpreting as direct content.")
-                return user_input
-        except OSError as e:
-            print(f"Could not interpret '{user_input}' as a file path due to an OS error: {e}.")
-            print("Interpreting input as direct content.")
-            return user_input
-        except Exception as e:
-            print(f"An error occurred while trying to process '{user_input}' as a file path: {e}.")
-            print("Interpreting input as direct content.")
-            return user_input
+            line = input() # Read subsequent lines
+            if line.strip().upper() == "END_OF_PASTE":
+                break
+            lines.append(line)
+        except EOFError:
+            # This might happen if input is redirected and EOF is reached
+            print("EOF reached while reading input.")
+            break
+    
+    pasted_content = "\n".join(lines)
+    if not pasted_content.strip():
+        print("Input cannot be empty. Please provide a file path or paste content.")
+        return get_source_content() # Recurse to try again
+        
+    return pasted_content
 
 def prepare_intermediate_source_file(content: str) -> pathlib.Path:
     """
@@ -90,9 +113,17 @@ def main():
     print("--- Starting File to Markdown Conversion Setup ---")
 
     source_content = get_source_content()
-    if not source_content.strip():
+    # The get_source_content function now loops until valid content is provided or a file is read.
+    # So, a separate check like `if not source_content.strip():` might be redundant if the function guarantees content.
+    # However, keeping it as a safeguard is fine.
+    if not source_content: # get_source_content should ideally not return None, but an empty string if all fails after retries.
+                           # Or raise an exception. For now, we assume it returns a string.
+        print("No source content could be obtained. Exiting.")
+        return
+    if not source_content.strip() and not pathlib.Path(source_content).is_file(): # Check if it's empty and not a path.
         print("No source content provided. Exiting.")
         return
+
 
     intermediate_file = prepare_intermediate_source_file(source_content)
     output_file = get_output_file_path()
@@ -108,28 +139,21 @@ def main():
         "Do not add any conversational text, commentary, introductions, or summaries before or after the markdown content itself."
     )
 
-    # Path to the batch file - assumed to be in the same directory as the Python script
     batch_file_path = pathlib.Path.cwd() / AIDER_BATCH_FILE_NAME
 
-    # Ensure the batch file exists (you'll create this file separately)
     if not batch_file_path.is_file():
         print(f"Error: Batch file '{AIDER_BATCH_FILE_NAME}' not found in the current directory: {pathlib.Path.cwd()}")
-        print("Please create this batch file.")
-        # Create a placeholder hello_world.bat if run_aider.bat is missing for testing purposes
-        hello_world_bat_path = pathlib.Path.cwd() / "hello_world.bat"
-        if not hello_world_bat_path.is_file():
-             print(f"Also, the 'hello_world.bat' file is missing. You can create it with the content provided separately.")
+        print("Please create this batch file with the content provided previously.")
         return
 
-    # Command to execute the batch file, passing the intermediate file and prompt as arguments
-    # We need to quote the arguments in case they contain spaces
     batch_command = [
         str(batch_file_path),
-        str(intermediate_file), # Argument %1 for the batch file
-        aider_prompt,          # Argument %2 for the batch file
+        str(intermediate_file), 
+        aider_prompt,          
     ]
 
-    print(f"Running batch file: {' '.join(batch_command)}")
+    print(f"Running batch file command: {' '.join(batch_command)}") # For display, join might not reflect exact execution for shell=False
+    print(f"Actual command list for subprocess: {batch_command}") # More accurate representation
     try:
         process = subprocess.run(
             batch_command,
@@ -137,11 +161,10 @@ def main():
             text=True,
             check=True,
             encoding="utf-8",
-            shell=False # Important for security and proper argument handling with shlex
+            shell=False 
         )
         
         print(f"Batch file executed successfully.")
-        # Optional: Log batch file's output for debugging
         # if process.stdout.strip():
         #     print(f"Batch file stdout:\n{process.stdout}")
         # if process.stderr.strip():
@@ -158,7 +181,7 @@ def main():
 
     except subprocess.CalledProcessError as e:
         print(f"\nBatch file execution failed with exit code {e.returncode}.")
-        print(f"Command: {' '.join(e.cmd)}")
+        print(f"Command: {' '.join(e.cmd)}") # e.cmd should be the list passed to subprocess.run
         print("Batch file standard output:")
         print(e.stdout if e.stdout else "[No standard output]")
         print("Batch file standard error:")
@@ -166,10 +189,8 @@ def main():
         print("\nExiting due to batch file processing error.")
         print(f"The intermediate file '{intermediate_file}' might contain partial results or error messages.")
     except FileNotFoundError:
-        # This error would now typically mean the batch file itself wasn't found,
-        # though we added a check for it earlier.
-        print(f"\nError: The batch file '{batch_file_path}' was not found or another command within it was not found.")
-        print("Please ensure the batch file exists and Aider is accessible from the command line.")
+        print(f"\nError: The batch file '{batch_file_path}' (or a command within it like 'aider') was not found.")
+        print("Please ensure the batch file exists and Aider is installed and accessible in your system's PATH.")
         print("Exiting.")
     except Exception as e:
         print(f"\nAn unexpected error occurred during batch file processing or file operations: {e}")
