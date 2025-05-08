@@ -18,7 +18,7 @@ echo Running Aider on: %INTERMEDIATE_FILE%
 echo With prompt: %AIDER_PROMPT%
 
 REM Ensure Aider is in your PATH or provide the full path to aider.exe
-aider --yes %INTERMEDIATE_FILE% --message %AIDER_PROMPT% --model gemini/gemini-2.0-flash-lite
+aider --yes %INTERMEDIATE_FILE% --message %AIDER_PROMPT% --model gemini/gemini-2.0-flash-exp
 
 IF ERRORLEVEL 1 (
     echo Aider command failed.

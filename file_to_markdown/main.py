@@ -118,7 +118,7 @@ def main():
     try:
         process = subprocess.run(
             batch_command,
-            capture_output=True,
+            capture_output=False,
             text=True,
             check=True, # Raises CalledProcessError for non-zero exit codes
             encoding="utf-8",
