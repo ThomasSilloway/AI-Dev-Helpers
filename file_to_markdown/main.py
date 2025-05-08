@@ -16,7 +16,7 @@ def get_source_content() -> str:
     """
     while True:
         try:
-            user_input = input("Please enter the full path to your source file: ").strip()
+            user_input = input("Please enter the full path to the file you want to convert: ").strip()
             if not user_input:
                 print("File path cannot be empty. Please try again or Ctrl+C to exit.")
                 continue
@@ -48,37 +48,19 @@ def prepare_intermediate_source_file(content: str) -> pathlib.Path:
     print(f"Source content written to: {intermediate_file_path}")
     return intermediate_file_path
 
-def get_output_file_path() -> pathlib.Path:
-    """Prompts for and validates the output markdown file path."""
-    while True:
-        try:
-            user_input = input("Specify path for output markdown file (e.g., output/my_doc.md):\n").strip()
-            if not user_input:
-                print("Output file path cannot be empty.")
-                continue
-            output_path = pathlib.Path(user_input)
-            if output_path.suffix.lower() != ".md":
-                output_path = output_path.with_suffix(".md")
-                print(f"Appending .md extension. Output: {output_path}")
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            return output_path
-        except KeyboardInterrupt:
-            print("\nOutput path specification aborted.")
-            raise # Propagate to main to exit
-        except Exception as e:
-            print(f"Error with output path '{user_input}': {e}. Try a valid path.")
-
 def main():
     """Main script logic."""
     print("--- Starting File to Markdown Conversion Setup ---")
+    #  Print current working directory
+    print(f"Current working directory: {pathlib.Path.cwd()}")
+    # Print directory this python file lives in
+    print(f"Script directory: {pathlib.Path(__file__).parent}")
     try:
         source_content = get_source_content()
         if not source_content: # Handles empty string from aborted get_source_content
             print("No source file provided. Exiting.")
             return
-        intermediate_file = source_content
-        # intermediate_file = prepare_intermediate_source_file(source_content)
-        output_file = get_output_file_path()
+        file_to_update = source_content
 
     except KeyboardInterrupt:
         print("\nOperation cancelled during setup. Exiting.")
@@ -87,7 +69,7 @@ def main():
         print(f"Error during setup: {e}. Exiting.")
         return
 
-    print(f"\n--- Setup Complete ---\nIntermediate: {intermediate_file}\nOutput: {output_file}")
+    print(f"\n--- Setup Complete ---\nFile To Update: {file_to_update}")
     print("\n--- Processing with Aider via Batch File ---")
 
     aider_prompt = (
@@ -96,23 +78,14 @@ def main():
         "Do not add any conversational text, commentary, introductions, or summaries."
     )
 
-    batch_file_path_str = AIDER_BATCH_FILE_NAME
+    batch_file_path = pathlib.Path(__file__).parent / AIDER_BATCH_FILE_NAME
     # Check if batch file is in Current Working Directory, if not, it must be in PATH
-    if not (pathlib.Path.cwd() / AIDER_BATCH_FILE_NAME).is_file():
-        # Check if it's findable by just its name (i.e., in PATH)
-        # A more robust check would involve shutil.which(), but for simplicity:
-        if not any(
-            os.access(os.path.join(path, AIDER_BATCH_FILE_NAME), os.X_OK)
-            for path in os.environ["PATH"].split(os.pathsep)
-        ):
-             print(f"Error: Batch file '{AIDER_BATCH_FILE_NAME}' not found in CWD or PATH.")
-             return
-        # If found in PATH, batch_file_path_str remains AIDER_BATCH_FILE_NAME
-    else: # Found in CWD
-        batch_file_path_str = str(pathlib.Path.cwd() / AIDER_BATCH_FILE_NAME)
+    if not (batch_file_path).is_file():
+        print(f"Error: Batch file '{AIDER_BATCH_FILE_NAME}' not found")
+        return
 
 
-    batch_command = [batch_file_path_str, str(intermediate_file), aider_prompt]
+    batch_command = [batch_file_path, str(file_to_update), aider_prompt]
 
     print(f"Running command: {batch_command}")
     try:
@@ -125,21 +98,14 @@ def main():
             shell=False # Recommended for security with list args
         )
         print("Batch file executed successfully.")
-        # print(f"Aider stdout:\n{process.stdout}") # Uncomment for Aider's direct output
-        # if process.stderr.strip(): print(f"Aider stderr:\n{process.stderr}")
-
-        print(f"Aider processed '{intermediate_file}'.")
-        markdown_content = intermediate_file.read_text(encoding="utf-8")
-        output_file.write_text(markdown_content, encoding="utf-8")
-        
-        print(f"\nMarkdown content written to: {output_file}")
+        print(f"Aider converted '{file_to_update}' with markdown formatting.")
         print("--- Conversion Complete ---")
 
     except subprocess.CalledProcessError as e:
         print(f"\nBatch file failed (exit code {e.returncode}). Command: {e.cmd}")
         print(f"Stdout:\n{e.stdout if e.stdout else '[No standard output]'}")
         print(f"Stderr:\n{e.stderr if e.stderr else '[No standard error]'}")
-        print(f"\nIntermediate file '{intermediate_file}' might contain partial results.")
+        print(f"\n'{file_to_update}' might contain partial results.")
     except FileNotFoundError: # This means the batch_command[0] was not found by the OS
         print(f"\nError: Command '{batch_command[0]}' not found. Ensure '{AIDER_BATCH_FILE_NAME}' is in CWD or PATH and executable.")
     except KeyboardInterrupt:
